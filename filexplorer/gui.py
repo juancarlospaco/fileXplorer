@@ -18,7 +18,7 @@
 
 # metadata
 ' fileXplorer for Ninja-IDE '
-__version__ = ' 0.1 '
+__version__ = ' 0.2 '
 __license__ = ' GPL '
 __author__ = ' juancarlospaco '
 __email__ = ' juancarlospaco@ubuntu.com '
@@ -32,17 +32,24 @@ __full_licence__ = ''
 
 # imports
 import os
+import sys
+import time
 import datetime
 import logging
+import itertools
 from random import randint
 from subprocess import call
-from commands import getoutput  # I hate subprocess.check_output()
 from string import punctuation
 from re import sub
 try:
     from urllib.request import urlopen  # py3
 except ImportError:
     from urllib2 import urlopen  # lint:ok
+if sys.platform != "win32":
+    try:
+        from subprocess import getoutput  # py3 on nix
+    except ImportError:
+        from commands import getoutput  # lint:ok
 
 from PyQt4.QtCore import Qt
 from PyQt4.QtCore import QProcess
@@ -86,7 +93,7 @@ WEATHER = 'http://m.wund.com/global/stations/87582.html'  # http:m.wund.com
 N = os.linesep  # crossplatform standard new line character string
 E = ' ERROR '  # trick for A if B else C, where C is E
 CHK = 'pylint --output-format=html '  # PyLint command and arguments
-SCH = 'locate --ignore-case --existing --nofollow --quiet --basename -l 35 '
+# SCH = 'locate --ignore-case --existing --nofollow --quiet --basename -l 35 '
 
 
 try:
@@ -232,7 +239,7 @@ class filexplorerPluginMain(plugin.Plugin):
         # file manager for py files
         self.textBrowser = QTextBrowser()
         self.textBrowser.setOpenLinks(False)
-        self.textBrowser.setHtml(('<br><hr>Alpha !<h1><i><center>' + __doc__ +
+        self.textBrowser.setHtml(('<br><hr>Beta !<h1><i><center>' + __doc__ +
         '<img src="/usr/share/ninja-ide/img/icon.png"></i></h1><hr></center>'))
         self.textBrowser.anchorClicked.connect(self.launchProgram)
 
@@ -246,7 +253,7 @@ class filexplorerPluginMain(plugin.Plugin):
         __email__ + N * 2 + '-Simple is better than Complex.' +
         'Thats why fileXplorer is that simple' + N +
         '-Flat is better than Nested.Thats why the folder tree is plain Flat' +
-        N + '-The implementation is easy to explain.  It has < 1000 lines! '))
+        N + '-The implementation is easy to explain.  It has < 500 lines! '))
 
         # print file view
         self.prt = QAction(QIcon.fromTheme("document-print"), 'Print', self)
@@ -294,8 +301,15 @@ class filexplorerPluginMain(plugin.Plugin):
 
         # Weather Conditions
         self.wea = QAction(QIcon.fromTheme("weather-showers"), 'Weather', self)
-        self.wea.triggered.connect(lambda:
-            self.textBrowser.setHtml(urlopen(WEATHER).read().strip()))
+        # I mailed people of page they say mobile ver never change,safe 2 parse
+        #
+        # this one is a " cosmetic " cut-off    (PyWAPI is dead)
+        self.wea.triggered.connect(lambda: self.textBrowser.setHtml(
+            '<h3><br>Weather</h3>' + ''.join(a for a in urlopen(WEATHER).read()
+            .strip().splitlines()[9:90] if a not in set(punctuation))))
+        # this one is raw, with footer and header
+        # self.wea.triggered.connect(lambda:
+            # self.textBrowser.setHtml(urlopen(WEATHER).read())
 
         # search for the truth
         self.sch = QAction(QIcon.fromTheme("edit-find"), 'Search file', self)
@@ -304,9 +318,16 @@ class filexplorerPluginMain(plugin.Plugin):
         self.srch = QLineEdit(self.textBrowser)
         self.srch.move(99, 30) if not self.srch.hide() else E
         self.srch.setPlaceholderText('Search Python files')
-        self.srch.returnPressed.connect(lambda: QMessageBox.information(
-            self.dock2, __doc__,
-            getoutput(SCH + str(self.srch.text()).lower() + '.py')))
+        self.srch.returnPressed.connect(lambda: self.textBrowser.setHtml(
+        ' <br> <h3> Search Results </h3> <hr> ' +
+        # getoutput(SCH + str(self.srch.text()).lower() + '.py')))
+        # Jedi list comprehension
+        str(["{}/{}".format(root, f) for root, f in list(itertools.chain(*
+            [list(itertools.product([root], files))
+            for root, dirs, files in os.walk(CONFIG_DIR)]))
+            if f.endswith(('.py', '.pyw', '.pth')) and not f.startswith('.')
+            and str(self.srch.text()).lower().strip() in f]
+        ).replace(',', '<br>')))
 
         # self.sc = QAction(QIcon.fromTheme("applications-development"),
         #    'View, study, edit fileXplorer Libre Source Code', self)
@@ -420,7 +441,7 @@ class filexplorerPluginMain(plugin.Plugin):
                 pass  # should never end here, it still works, but item ignored
         if html == "":
             self.textBrowser.setHtml(('<br><h4>No Python on Folder! ಠ_ಠ</h4>'))
-            return
+            return  # should never end here,it still works,but displays nothing
         # display html page in text browser
         self.textBrowser.setHtml('''<style>*{text-decoration:none;padding:0;
         margin:0;border:0;width:100%;font-family:'ubuntu light';}</style>''' +
@@ -447,32 +468,47 @@ class filexplorerPluginMain(plugin.Plugin):
         folder = QDir(CONFIG_DIR)
         folder.setFilter(QDir.Dirs)
         for folderName in folder.entryInfoList():
+            # if folder filename is > 2 to avoid '.' and '..'
             if len(folderName.fileName()) > 2:
                 _dir = os.path.join(CONFIG_DIR, str(folderName.fileName()))
-                configButton = QListWidgetItem(self.contentsWidget)
-                configButton.setIcon(QIcon.fromTheme("folder"))
-                configButton.setText(self.getSectionTitle(_dir))
-                configButton.setToolTip(folderName.fileName() + N +
-                '1 click view,2 clicks open' + N + 'CTRL++ Zoom+, CTRL+- Zoom-'
-                + N + 'Delete to hide selected item')
-                # configButton.setTextAlignment(Qt.AlignLeft)
-                configButton.setData(Qt.UserRole, folderName.fileName())
-                # configButton.setFlags(Qt.ItemIsSelectable |
-                #                      Qt.ItemIsEnabled)
-                # configButton.setFlags(Qt.ItemIsEnabled)
-                # configButton.setFont(QFont(
-                #    configButton.font().setBold(True)))
+                # if folder has python files inside
+                if len([f for f in os.listdir(_dir) if not f.startswith('.')
+                and f.endswith(('.py', '.pyw', '.pth'))]) != 0:
+                    configButton = QListWidgetItem(self.contentsWidget)
+                    configButton.setIcon(QIcon.fromTheme("folder"))
+                    configButton.setText(self.getSectionTitle(_dir))
+                    configButton.setToolTip(folderName.fileName() + N +
+                        '1 click view,2 clicks open' + N +
+                        'CTRL++ Zoom+, CTRL+- Zoom-' + N +
+                        'Delete to hide selected item')
+                    # configButton.setTextAlignment(Qt.AlignLeft)
+                    configButton.setData(Qt.UserRole, folderName.fileName())
+                    # configButton.setFlags(Qt.ItemIsSelectable |
+                    #                      Qt.ItemIsEnabled)
+                    # configButton.setFlags(Qt.ItemIsEnabled)
+                    # configButton.setFont(QFont(
+                    #    configButton.font().setBold(True)))
 
     def commentBuilder(self, _flnm):
         ' build comments with human readable info for the user '
         # TODO  ...always add more info
         f = file(_flnm, 'r').read()
-        return (str(os.path.getsize(_flnm) / 1024) + ' Kilobytes,' +
-               str(len(file(_flnm, 'r').readlines())) + ' Lines,' +
-               str(len(f.replace(N, ''))) + ' Characters,' +
+        # ctime is NOT crossplatform,metadata change on *nix,creation on Window
+        # http://docs.python.org/library/os.path.html#os.path.getctime
+        #
+        # Python built-in mimetype uses file extension,if no extension it fails
+        # Python Magic http://github.com/ahupp/python-magic
+        return (str(os.path.getsize(_flnm) / 1024) + ' Kilobytes, ' +
+               str(len(file(_flnm, 'r').readlines())) + ' Lines, ' +
+               str(len(f.replace(N, ''))) + ' Characters, ' +
                str(len([a for a in sub('[^a-zA-Z0-9 ]', '', f).split(' ')
-               if a != ''])) + ' Words,' +
-               str(len([a for a in f if a in punctuation])) + ' Punctuations')
+               if a != ''])) + ' Words, ' +
+               str(len([a for a in f if a in punctuation])) + ' Punctuation,' +
+               oct(os.stat(_flnm).st_mode)[-3:] + ' Permissions, ' +
+               time.ctime(os.path.getatime(_flnm)) + ' Accessed, ' +
+               time.ctime(os.path.getmtime(_flnm)) + ' Modified. '
+               # magic.Magic(mime=True).from_file(_flnm) + ' Mimetype '
+               )
 
     def getSectionTitle(self, dir_name):
         ' parse title for file view titles '
