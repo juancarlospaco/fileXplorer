@@ -18,12 +18,12 @@
 
 # metadata
 ' fileXplorer for Ninja-IDE '
-__version__ = ' 0.2 '
+__version__ = ' 0.4 '
 __license__ = ' GPL '
 __author__ = ' juancarlospaco '
 __email__ = ' juancarlospaco@ubuntu.com '
 __url__ = ''
-__date__ = ' 25/01/2013 '
+__date__ = ' 01/02/2013 '
 __prj__ = ' filexplorer '
 __docformat__ = 'html'
 __source__ = ''
@@ -169,6 +169,7 @@ class filexplorerPluginMain(plugin.Plugin):
     ' main class for plugin '
     def initialize(self, *args, **kwargs):
         ' class init '
+        global CONFIG_DIR
         ec = ExplorerContainer()
         super(filexplorerPluginMain, self).initialize(*args, **kwargs)
 
@@ -178,13 +179,14 @@ class filexplorerPluginMain(plugin.Plugin):
         self.dock1.setFeatures(QDockWidget.DockWidgetFloatable |
                                            QDockWidget.DockWidgetMovable)
         # self.dock1.setToolTip("fileXplorer > dock 1")
-        self.dock1.setMaximumWidth(200)
+        self.dock1.setMaximumWidth(150)
         self.dock2 = QDockWidget()
         self.dock2.setAllowedAreas(Qt.LeftDockWidgetArea |
                                    Qt.RightDockWidgetArea)
         self.dock2.setFeatures(QDockWidget.DockWidgetFloatable |
                                            QDockWidget.DockWidgetMovable)
-        # self.dock2.setToolTip("fileXplorer > dock 2")
+        self.dock2.setWindowTitle("fileXplorer")
+        self.dock2.setStyleSheet('QDockWidget::title { text-align: center; }')
 
         class TransientWidget(QWidget):
             ' persistant widget thingy '
@@ -206,6 +208,16 @@ class filexplorerPluginMain(plugin.Plugin):
         # GUI stuff
         # self.setToolTip(__doc__)
         self.dock1.setFont(QFont(self.dock1.font().setBold(True)))
+
+        # custom qdockwidget stuff
+        # self.shade = QPushButton(QIcon.fromTheme("view-fullscreen"), '',
+        #     self.dock2)
+        # self.shade.setFlat(True)
+        # self.shade.hide()
+        # self.shade.clicked.connect(lambda:
+            #self.dock2.setGeometry(QDesktopWidget().screenGeometry())
+            #if self.dock2.geometry() != QDesktopWidget().screenGeometry()
+            #else self.dock2.setGeometry(99, 99, 200, 99))
 
         # reload and target
         self.reload = QPushButton(QIcon.fromTheme("view-refresh"), '',
@@ -275,7 +287,9 @@ class filexplorerPluginMain(plugin.Plugin):
         tmr = QTimer(self)
         tmr.timeout.connect(lambda: self.clock.display(
             datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S %p")))
-        self.clock.setGeometry(0, 30, 200, 50) if not tmr.start(1000) else E
+        self.clock.move(0, 30)
+        # self.clock.resize(200, 99)
+        tmr.start(1000)
         self.clk = QAction(QIcon.fromTheme("appointment-soon"), 'Time', self)
         self.clk.triggered.connect(lambda:
         self.clock.show() if not self.clock.isVisible() else self.clock.hide())
@@ -283,17 +297,18 @@ class filexplorerPluginMain(plugin.Plugin):
         # Disk Usage Bar
         self.hdbar = QProgressBar(self.textBrowser)
         self.hdbar.setGeometry(9, 30, 25, 400) if not self.hdbar.hide() else E
-        self.hdbar.setMaximum(os.statvfs(HOME).f_blocks *
-            os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
-        self.hdbar.setValue(os.statvfs(HOME).f_bfree *
-            os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
+        if sys.platform != 'win32':
+            self.hdbar.setMaximum(os.statvfs(HOME).f_blocks *
+                os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
+            self.hdbar.setValue(os.statvfs(HOME).f_bfree *
+                os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
         # self.hdbar.setToolTip(str(self.hdbar.value()))
         self.hdbar.setOrientation(Qt.Vertical)
         self.hdbar.setStyleSheet('''QProgressBar{background-color:
         QLinearGradient(spread:pad,x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,0,0,99),
         stop:1 rgba(0,255,0,200));color:#fff;border:none;border-radius:9px;}
         QProgressBar::chunk{background-color:QLinearGradient(spread:pad,x1:0,
-        y1:0,x2:1,y2:0.27,stop:0 rgb(0,0,0),stop:1 rgb(150,255,255));padding:0;
+        y1:0,x2:1,y2:0.27,stop:0 rgb(0,0,0),stop:1 rgb(9,99,255));padding:0;
         border:none;border-radius:9px;height:19px;margin:1px;}''')
         self.hdd = QAction(QIcon.fromTheme("drive-harddisk"), 'Disk Use', self)
         self.hdd.triggered.connect(lambda:
@@ -302,11 +317,11 @@ class filexplorerPluginMain(plugin.Plugin):
         # Weather Conditions
         self.wea = QAction(QIcon.fromTheme("weather-showers"), 'Weather', self)
         # I mailed people of page they say mobile ver never change,safe 2 parse
-        #
+        self.wea.triggered.connect(self.get_weather)
         # this one is a " cosmetic " cut-off    (PyWAPI is dead)
-        self.wea.triggered.connect(lambda: self.textBrowser.setHtml(
-            '<h3><br>Weather</h3>' + ''.join(a for a in urlopen(WEATHER).read()
-            .strip().splitlines()[9:90] if a not in set(punctuation))))
+        # self.wea.triggered.connect(lambda: self.textBrowser.setHtml(
+          # '<h3><br>Weather</h3>' + ''.join(a for a in urlopen(WEATHER).read()
+          # .strip().splitlines()[9:90] if a not in set(punctuation))))
         # this one is raw, with footer and header
         # self.wea.triggered.connect(lambda:
             # self.textBrowser.setHtml(urlopen(WEATHER).read())
@@ -346,8 +361,19 @@ class filexplorerPluginMain(plugin.Plugin):
         self.clk, self.hdd, self.wea, self.sch))  # self.trm, self.sc, self.qta
 
         # check for hardcoded directory
-        if CONFIG_DIR != '':
+        if CONFIG_DIR != '' and len(CONFIG_DIR) > 2:
             self.initContentsWidget()
+
+        # check for config file from previous execution
+        try:
+            c = os.path.join(os.path.abspath(os.path.dirname(__file__)), "dir")
+            config_file = file(c, 'r')
+            CONFIG_DIR = str(config_file.read()).strip()
+            config_file.close()
+            if CONFIG_DIR != '' and len(CONFIG_DIR) > 2:
+                self.initContentsWidget()
+        except:
+            pass
 
     def launchProgram(self, _pyf):
         ' call ninja-ide with file as argument,or text preview,or lint report '
@@ -444,9 +470,10 @@ class filexplorerPluginMain(plugin.Plugin):
             return  # should never end here,it still works,but displays nothing
         # display html page in text browser
         self.textBrowser.setHtml('''<style>*{text-decoration:none;padding:0;
-        margin:0;border:0;width:100%;font-family:'ubuntu light';}</style>''' +
-        '<center><h3><br>' + self.getSectionTitle(_dir) +
-        "</h3> <table>" + html + '</table></center>')
+        margin:0;border:0;width:100%;font-family:'ubuntu light';
+        background:transparent;}</style><center><h3><br>''' +
+        self.getSectionTitle(_dir) + "</h3><table>" + html +
+        '</table></center>')
 
     def cellB(self, _icn, _pyf, _cmnt, _flnm):
         ' function to build HTML table cells '
@@ -521,6 +548,11 @@ class filexplorerPluginMain(plugin.Plugin):
         global CONFIG_DIR
         CONFIG_DIR = str(QFileDialog.getExistingDirectory(self.dock2,
                      ' Please, open a Folder to use as root folder...', HOME))
+        if CONFIG_DIR != '' and len(CONFIG_DIR) > 2:
+            c = os.path.join(os.path.abspath(os.path.dirname(__file__)), "dir")
+            default_dir = file(c, 'w')
+            default_dir.write(CONFIG_DIR)
+            default_dir.close()
         self.initContentsWidget()
 
     def openfolder(self, filename=HOME):
@@ -529,3 +561,25 @@ class filexplorerPluginMain(plugin.Plugin):
             os.startfile(filename)
         except:
             call('xdg-open "' + filename + '"', shell=True)
+
+    def get_weather(self):
+        ' get weather conditions '
+        # get weather conditions on self-closing Widget Overlay
+        w = ' <center> <h3> Weather ! </h3> <hr> ' + ''.join(a
+            for a in urlopen(WEATHER).read().lower().strip().splitlines()[9:92]
+            if a not in set(punctuation))
+        prv = QDialog(self.dock2)
+        prv.setWindowFlags(Qt.FramelessWindowHint)
+        prv.setAutoFillBackground(True)
+        prv.setGeometry(self.textBrowser.geometry())
+        tex = QLabel(w + '</table><i>20 Seconds auto-close</i></center>', prv)
+        progre = CustomProgressBar(prv)
+        progre.setValue(0)
+        tmNyan = QTimer(prv)
+        tmNyan.timeout.connect(lambda: progre.setValue(progre.value() + 1))
+        tmNyan.start(200)
+        tmr = QTimer(prv)
+        tmr.timeout.connect(prv.close)
+        tmr.start(20000)
+        tex.resize(prv.size())
+        prv.exec_()
