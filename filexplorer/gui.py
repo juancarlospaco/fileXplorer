@@ -18,12 +18,12 @@
 
 # metadata
 ' fileXplorer for Ninja-IDE '
-__version__ = ' 0.4 '
+__version__ = ' 0.6 '
 __license__ = ' GPL '
 __author__ = ' juancarlospaco '
 __email__ = ' juancarlospaco@ubuntu.com '
 __url__ = ''
-__date__ = ' 01/02/2013 '
+__date__ = ' 05/02/2013 '
 __prj__ = ' filexplorer '
 __docformat__ = 'html'
 __source__ = ''
@@ -43,8 +43,10 @@ from string import punctuation
 from re import sub
 try:
     from urllib.request import urlopen  # py3
+    import xmlrpc.client as xmlrpclib  # py3
 except ImportError:
     from urllib2 import urlopen  # lint:ok
+    import xmlrpclib  # lint:ok
 if sys.platform != "win32":
     try:
         from subprocess import getoutput  # py3 on nix
@@ -81,6 +83,9 @@ from PyQt4.QtGui import QColor
 from PyQt4.QtGui import QPainter
 from PyQt4.QtGui import QHBoxLayout
 from PyQt4.QtGui import QWidget
+from PyQt4.QtGui import QCursor
+
+from .pypi_proxy_donottrack import ProxyTransport
 
 from ninja_ide.gui.explorer.explorer_container import ExplorerContainer
 from ninja_ide.core import plugin
@@ -93,7 +98,6 @@ WEATHER = 'http://m.wund.com/global/stations/87582.html'  # http:m.wund.com
 N = os.linesep  # crossplatform standard new line character string
 E = ' ERROR '  # trick for A if B else C, where C is E
 CHK = 'pylint --output-format=html '  # PyLint command and arguments
-# SCH = 'locate --ignore-case --existing --nofollow --quiet --basename -l 35 '
 
 
 try:
@@ -178,7 +182,6 @@ class filexplorerPluginMain(plugin.Plugin):
                                    Qt.RightDockWidgetArea)
         self.dock1.setFeatures(QDockWidget.DockWidgetFloatable |
                                            QDockWidget.DockWidgetMovable)
-        # self.dock1.setToolTip("fileXplorer > dock 1")
         self.dock1.setMaximumWidth(150)
         self.dock2 = QDockWidget()
         self.dock2.setAllowedAreas(Qt.LeftDockWidgetArea |
@@ -224,7 +227,7 @@ class filexplorerPluginMain(plugin.Plugin):
                                   self.dock1)
         self.reload.clicked.connect(self.initFolder)
         self.reload.setFlat(True)
-        # self.reload.setCursor(QCursor(Qt.PointingHandCursor))
+        self.reload.setCursor(QCursor(Qt.PointingHandCursor))
 
         # directory lists
         self.contentsWidget = QListWidget()
@@ -283,7 +286,7 @@ class filexplorerPluginMain(plugin.Plugin):
         self.clock.setNumDigits(22) if not self.clock.hide() else E
         # self.clock.setAutoFillBackground(True)
         self.clock.setStyleSheet('''*{background-color:QLinearGradient(spread:
-        pad,x1:0,y1:0,x2:1,y2:1,stop:0 rgb(99,128,128),stop:1 rgb(9,9,9));}''')
+        pad,x1:0,y1:0,x2:1,y2:1,stop:0 rgb(9,128,255),stop:1 rgb(9,9,9));}''')
         tmr = QTimer(self)
         tmr.timeout.connect(lambda: self.clock.display(
             datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S %p")))
@@ -296,7 +299,7 @@ class filexplorerPluginMain(plugin.Plugin):
 
         # Disk Usage Bar
         self.hdbar = QProgressBar(self.textBrowser)
-        self.hdbar.setGeometry(9, 30, 25, 400) if not self.hdbar.hide() else E
+        self.hdbar.setGeometry(9, 50, 26, 400) if not self.hdbar.hide() else E
         if sys.platform != 'win32':
             self.hdbar.setMaximum(os.statvfs(HOME).f_blocks *
                 os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
@@ -306,7 +309,7 @@ class filexplorerPluginMain(plugin.Plugin):
         self.hdbar.setOrientation(Qt.Vertical)
         self.hdbar.setStyleSheet('''QProgressBar{background-color:
         QLinearGradient(spread:pad,x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,0,0,99),
-        stop:1 rgba(0,255,0,200));color:#fff;border:none;border-radius:9px;}
+        stop:1 rgba(9,255,9,200));color:#fff;border:none;border-radius:9px;}
         QProgressBar::chunk{background-color:QLinearGradient(spread:pad,x1:0,
         y1:0,x2:1,y2:0.27,stop:0 rgb(0,0,0),stop:1 rgb(9,99,255));padding:0;
         border:none;border-radius:9px;height:19px;margin:1px;}''')
@@ -318,13 +321,6 @@ class filexplorerPluginMain(plugin.Plugin):
         self.wea = QAction(QIcon.fromTheme("weather-showers"), 'Weather', self)
         # I mailed people of page they say mobile ver never change,safe 2 parse
         self.wea.triggered.connect(self.get_weather)
-        # this one is a " cosmetic " cut-off    (PyWAPI is dead)
-        # self.wea.triggered.connect(lambda: self.textBrowser.setHtml(
-          # '<h3><br>Weather</h3>' + ''.join(a for a in urlopen(WEATHER).read()
-          # .strip().splitlines()[9:90] if a not in set(punctuation))))
-        # this one is raw, with footer and header
-        # self.wea.triggered.connect(lambda:
-            # self.textBrowser.setHtml(urlopen(WEATHER).read())
 
         # search for the truth
         self.sch = QAction(QIcon.fromTheme("edit-find"), 'Search file', self)
@@ -333,16 +329,7 @@ class filexplorerPluginMain(plugin.Plugin):
         self.srch = QLineEdit(self.textBrowser)
         self.srch.move(99, 30) if not self.srch.hide() else E
         self.srch.setPlaceholderText('Search Python files')
-        self.srch.returnPressed.connect(lambda: self.textBrowser.setHtml(
-        ' <br> <h3> Search Results </h3> <hr> ' +
-        # getoutput(SCH + str(self.srch.text()).lower() + '.py')))
-        # Jedi list comprehension
-        str(["{}/{}".format(root, f) for root, f in list(itertools.chain(*
-            [list(itertools.product([root], files))
-            for root, dirs, files in os.walk(CONFIG_DIR)]))
-            if f.endswith(('.py', '.pyw', '.pth')) and not f.startswith('.')
-            and str(self.srch.text()).lower().strip() in f]
-        ).replace(',', '<br>')))
+        self.srch.returnPressed.connect(self.search)
 
         # self.sc = QAction(QIcon.fromTheme("applications-development"),
         #    'View, study, edit fileXplorer Libre Source Code', self)
@@ -566,7 +553,7 @@ class filexplorerPluginMain(plugin.Plugin):
         ' get weather conditions '
         # get weather conditions on self-closing Widget Overlay
         w = ' <center> <h3> Weather ! </h3> <hr> ' + ''.join(a
-            for a in urlopen(WEATHER).read().lower().strip().splitlines()[9:92]
+            for a in urlopen(WEATHER).read().strip().splitlines()[38:111]
             if a not in set(punctuation))
         prv = QDialog(self.dock2)
         prv.setWindowFlags(Qt.FramelessWindowHint)
@@ -583,3 +570,29 @@ class filexplorerPluginMain(plugin.Plugin):
         tmr.start(20000)
         tex.resize(prv.size())
         prv.exec_()
+
+    def search(self):
+        ' function to search python files '
+        # get search results of python filenames local or remote
+        pypi_url = 'http://pypi.python.org/pypi'
+        # pypi query
+        pypi = xmlrpclib.ServerProxy(pypi_url, transport=ProxyTransport())
+        try:
+            pypi_query = pypi.search({'name': str(self.srch.text()).lower()})
+            pypi_fls = list(set(['pypi.python.org/pypi/' + a['name'] +
+                   ' | pip install ' + a['name'] for a in pypi_query]))
+        except:
+            pypi_fls = '<b> ERROR: Internet not available! ಠ_ಠ </b>'
+        s_out = (' <br> <h3> Search Local Python files: </h3> <hr> ' +
+        # Jedi list comprehension for LOCAL search
+        str(["{}/{}".format(root, f) for root, f in list(itertools.chain(*
+            [list(itertools.product([root], files))
+            for root, dirs, files in os.walk(CONFIG_DIR)]))
+            if f.endswith(('.py', '.pyw', '.pth')) and not f.startswith('.')
+            and str(self.srch.text()).lower().strip() in f]
+        ).replace(',', '<br>') + '<hr><h3> Search PyPI Python files: </h3>' +
+        # wraped pypi query REMOTE search
+        str(pypi_fls).replace(',', '<br>') + '<hr>Auto-Proxy:ON, DoNotTrack:ON'
+        )
+        # print(s_out)
+        self.textBrowser.setHtml(s_out)
