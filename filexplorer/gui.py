@@ -18,7 +18,7 @@
 
 # metadata
 ' fileXplorer for Ninja-IDE '
-__version__ = ' 0.6 '
+__version__ = ' 0.8 '
 __license__ = ' GPL '
 __author__ = ' juancarlospaco '
 __email__ = ' juancarlospaco@ubuntu.com '
@@ -37,6 +37,7 @@ import time
 import datetime
 import logging
 import itertools
+from sip import setapi
 from random import randint
 from subprocess import call
 from string import punctuation
@@ -53,11 +54,17 @@ if sys.platform != "win32":
     except ImportError:
         from commands import getoutput  # lint:ok
 
+
+# API 2
+(setapi(a, 2) for a in ("QDate", "QDateTime", "QString", "QTime", "QUrl",
+                        "QTextStream", "QVariant"))
+
 from PyQt4.QtCore import Qt
 from PyQt4.QtCore import QProcess
 from PyQt4.QtCore import QTimer
 from PyQt4.QtCore import QDir
 from PyQt4.QtCore import QPoint
+from PyQt4.QtCore import QSize
 
 from PyQt4.QtGui import QPushButton
 from PyQt4.QtGui import QDialog
@@ -78,12 +85,13 @@ from PyQt4.QtGui import QProgressBar
 from PyQt4.QtGui import QToolBar
 from PyQt4.QtGui import QLCDNumber
 from PyQt4.QtGui import QListWidgetItem
-from PyQt4.QtGui import QFont
 from PyQt4.QtGui import QColor
 from PyQt4.QtGui import QPainter
 from PyQt4.QtGui import QHBoxLayout
 from PyQt4.QtGui import QWidget
-from PyQt4.QtGui import QCursor
+from PyQt4.QtGui import QColorDialog
+from PyQt4.QtGui import QTableWidget
+from PyQt4.QtGui import QTableWidgetItem
 
 from .pypi_proxy_donottrack import ProxyTransport
 
@@ -210,7 +218,7 @@ class filexplorerPluginMain(plugin.Plugin):
 
         # GUI stuff
         # self.setToolTip(__doc__)
-        self.dock1.setFont(QFont(self.dock1.font().setBold(True)))
+        # self.dock1.setFont(QFont(self.dock1.font().setBold(True)))
 
         # custom qdockwidget stuff
         # self.shade = QPushButton(QIcon.fromTheme("view-fullscreen"), '',
@@ -227,7 +235,7 @@ class filexplorerPluginMain(plugin.Plugin):
                                   self.dock1)
         self.reload.clicked.connect(self.initFolder)
         self.reload.setFlat(True)
-        self.reload.setCursor(QCursor(Qt.PointingHandCursor))
+        # self.reload.setCursor(QCursor(Qt.PointingHandCursor))
 
         # directory lists
         self.contentsWidget = QListWidget()
@@ -254,7 +262,7 @@ class filexplorerPluginMain(plugin.Plugin):
         # file manager for py files
         self.textBrowser = QTextBrowser()
         self.textBrowser.setOpenLinks(False)
-        self.textBrowser.setHtml(('<br><hr>Beta !<h1><i><center>' + __doc__ +
+        self.textBrowser.setHtml(('<br><hr><h1><i><center>' + __doc__ +
         '<img src="/usr/share/ninja-ide/img/icon.png"></i></h1><hr></center>'))
         self.textBrowser.anchorClicked.connect(self.launchProgram)
 
@@ -283,7 +291,13 @@ class filexplorerPluginMain(plugin.Plugin):
 
         # LCD Date and Time
         self.clock = QLCDNumber(self.textBrowser)
-        self.clock.setNumDigits(22) if not self.clock.hide() else E
+        self.clock.setNumDigits(24) if not self.clock.hide() else E
+        self.cpt = QPushButton(QIcon.fromTheme("edit-copy"), '', self.clock)
+        self.cpt.clicked.connect(lambda: QApplication.clipboard().setText(
+            datetime.datetime.now().strftime(" %A %B %d-%m-%Y %H:%M:%S %p ")))
+        self.cpt.setFlat(True)
+        self.cpt.resize(25, 25)
+        self.cpt.setToolTip('Copy to Clipboard')
         # self.clock.setAutoFillBackground(True)
         self.clock.setStyleSheet('''*{background-color:QLinearGradient(spread:
         pad,x1:0,y1:0,x2:1,y2:1,stop:0 rgb(9,128,255),stop:1 rgb(9,9,9));}''')
@@ -299,7 +313,7 @@ class filexplorerPluginMain(plugin.Plugin):
 
         # Disk Usage Bar
         self.hdbar = QProgressBar(self.textBrowser)
-        self.hdbar.setGeometry(9, 50, 26, 400) if not self.hdbar.hide() else E
+        self.hdbar.setGeometry(9, 55, 25, 400) if not self.hdbar.hide() else E
         if sys.platform != 'win32':
             self.hdbar.setMaximum(os.statvfs(HOME).f_blocks *
                 os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
@@ -327,9 +341,19 @@ class filexplorerPluginMain(plugin.Plugin):
         self.sch.triggered.connect(lambda:
         self.srch.show() if not self.srch.isVisible() else self.srch.hide())
         self.srch = QLineEdit(self.textBrowser)
-        self.srch.move(99, 30) if not self.srch.hide() else E
+        self.srch.move(99, 55) if not self.srch.hide() else E
         self.srch.setPlaceholderText('Search Python files')
         self.srch.returnPressed.connect(self.search)
+
+        # color chooser
+        self.cl = QAction(QIcon.fromTheme("applications-graphics"),
+                          'Color Chooser to Clipboard', self)
+        self.cl.triggered.connect(self.showQColorDialog)
+
+        # icon chooser
+        self.icn = QAction(QIcon.fromTheme("insert-image"),
+                          'Icon Chooser to Clipboard', self)
+        self.icn.triggered.connect(self.iconChooser)
 
         # self.sc = QAction(QIcon.fromTheme("applications-development"),
         #    'View, study, edit fileXplorer Libre Source Code', self)
@@ -345,7 +369,8 @@ class filexplorerPluginMain(plugin.Plugin):
 
         # tool bar with actions
         QToolBar(self.textBrowser).addActions((self.abt, self.prt, self.pic,
-        self.clk, self.hdd, self.wea, self.sch))  # self.trm, self.sc, self.qta
+        self.clk, self.hdd, self.wea, self.sch, self.cl, self.icn))
+        # self.trm, self.sc, self.qta))
 
         # check for hardcoded directory
         if CONFIG_DIR != '' and len(CONFIG_DIR) > 2:
@@ -509,9 +534,6 @@ class filexplorerPluginMain(plugin.Plugin):
         f = file(_flnm, 'r').read()
         # ctime is NOT crossplatform,metadata change on *nix,creation on Window
         # http://docs.python.org/library/os.path.html#os.path.getctime
-        #
-        # Python built-in mimetype uses file extension,if no extension it fails
-        # Python Magic http://github.com/ahupp/python-magic
         return (str(os.path.getsize(_flnm) / 1024) + ' Kilobytes, ' +
                str(len(file(_flnm, 'r').readlines())) + ' Lines, ' +
                str(len(f.replace(N, ''))) + ' Characters, ' +
@@ -520,9 +542,7 @@ class filexplorerPluginMain(plugin.Plugin):
                str(len([a for a in f if a in punctuation])) + ' Punctuation,' +
                oct(os.stat(_flnm).st_mode)[-3:] + ' Permissions, ' +
                time.ctime(os.path.getatime(_flnm)) + ' Accessed, ' +
-               time.ctime(os.path.getmtime(_flnm)) + ' Modified. '
-               # magic.Magic(mime=True).from_file(_flnm) + ' Mimetype '
-               )
+               time.ctime(os.path.getmtime(_flnm)) + ' Modified. ')
 
     def getSectionTitle(self, dir_name):
         ' parse title for file view titles '
@@ -583,7 +603,7 @@ class filexplorerPluginMain(plugin.Plugin):
                    ' | pip install ' + a['name'] for a in pypi_query]))
         except:
             pypi_fls = '<b> ERROR: Internet not available! ಠ_ಠ </b>'
-        s_out = (' <br> <h3> Search Local Python files: </h3> <hr> ' +
+        s_out = ('<br> <br> <br> <h3> Search Local Python files: </h3> <hr> ' +
         # Jedi list comprehension for LOCAL search
         str(["{}/{}".format(root, f) for root, f in list(itertools.chain(*
             [list(itertools.product([root], files))
@@ -592,7 +612,43 @@ class filexplorerPluginMain(plugin.Plugin):
             and str(self.srch.text()).lower().strip() in f]
         ).replace(',', '<br>') + '<hr><h3> Search PyPI Python files: </h3>' +
         # wraped pypi query REMOTE search
-        str(pypi_fls).replace(',', '<br>') + '<hr>Auto-Proxy:ON, DoNotTrack:ON'
-        )
+        str(pypi_fls).replace(',', '<br>') + '<hr>Auto-Proxy:ON,DoNotTrack:ON')
         # print(s_out)
+        self.srch.clear()
         self.textBrowser.setHtml(s_out)
+
+    def showQColorDialog(self):
+        ' Choose a Color and copy it to clipboard '
+        color = QColorDialog.getColor()
+        if color.isValid():
+            QApplication.clipboard().setText('"' + color.name() + '"')
+
+    def iconChooser(self):
+        ' Choose a Icon and copy it to clipboard '
+        #
+        from .std_icon_naming import std_icon_naming as a
+        #
+        prv = QDialog(self.dock2)
+        prv.setWindowFlags(Qt.FramelessWindowHint)
+        prv.setAutoFillBackground(True)
+        prv.setGeometry(self.textBrowser.geometry())
+        table = QTableWidget(prv)
+        table.setColumnCount(1)
+        table.setRowCount(len(a))
+        table.verticalHeader().setVisible(True)
+        table.horizontalHeader().setVisible(False)
+        table.setShowGrid(True)
+        table.setIconSize(QSize(128, 128))
+        for index, icon in enumerate(a):
+            item = QTableWidgetItem(QIcon.fromTheme(icon), '')
+            # item.setData(Qt.UserRole, '')
+            item.setToolTip(icon)
+            table.setItem(index, 0, item)
+        table.clicked.connect(lambda: QApplication.clipboard().setText(
+            'QtGui.QIcon.fromTheme("' + table.currentItem().toolTip() + '")'))
+        table.doubleClicked.connect(prv.close)
+        table.resizeColumnsToContents()
+        table.resizeRowsToContents()
+        QLabel('<h3> <br> 1 Click Copy, 2 Clicks Close </h3>', table)
+        table.resize(prv.size())
+        prv.exec_()
