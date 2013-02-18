@@ -47,11 +47,6 @@ try:
 except ImportError:
     from urllib2 import urlopen  # lint:ok
     import xmlrpclib  # lint:ok
-if sys.platform != "win32":
-    try:
-        from subprocess import getoutput  # py3 on nix
-    except ImportError:
-        from commands import getoutput  # lint:ok
 
 # API 2
 (setapi(a, 2) for a in ("QDate", "QDateTime", "QString", "QTime", "QUrl",
@@ -322,3 +317,8 @@ class filexplorerPluginMain(plugin.Plugin):
         if not self.process.waitForStarted():
             print((" ERROR: %s failed!" % (str(f))))
             return
+
+
+if __name__ == '__main__':
+    ' Do NOT add anything here ! '
+    print(__doc__)
