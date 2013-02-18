@@ -2,7 +2,7 @@
   "module": "filexplorer",
   "class": "filexplorerPluginMain",
   "authors": "Juan Carlos <JuanCarlosPaco@Ubuntu.com>",
-  "version": "0.8",
-  "url": "http://ninja-ide.org",
+  "version": "1.0",
+  "url": "https://github.com/juancarlospaco/fileXplorer",
   "description": " fileXplorer for NINJA-IDE "
 }
