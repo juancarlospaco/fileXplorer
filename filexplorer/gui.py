@@ -18,12 +18,12 @@
 
 # metadata
 ' fileXplorer for Ninja-IDE '
-__version__ = ' 1.0 '
+__version__ = ' 1.2 '
 __license__ = ' GPL '
 __author__ = ' juancarlospaco '
 __email__ = ' juancarlospaco@ubuntu.com '
 __url__ = ''
-__date__ = ' 20/02/2013 '
+__date__ = ' 30/05/2013 '
 __prj__ = ' filexplorer '
 __docformat__ = 'html'
 __source__ = ''
@@ -31,10 +31,10 @@ __full_licence__ = ''
 
 
 # imports
-import os
 import sys
+from os import path, linesep, statvfs, walk, stat
 import time
-import datetime
+from datetime import datetime
 import logging
 import itertools
 from sip import setapi
@@ -42,41 +42,26 @@ from subprocess import call
 from string import punctuation
 from re import sub
 try:
-    from urllib.request import urlopen  # py3
-    import xmlrpc.client as xmlrpclib  # py3
-except ImportError:
-    from urllib2 import urlopen  # lint:ok
-    import xmlrpclib  # lint:ok
+    from urllib2 import urlopen
+except ImportError:  # py3
+    from urllib.request import urlopen  # lint:ok
+try:
+    import xmlrpclib
+except ImportError:  # py3
+    import xmlrpc.client as xmlrpclib  # lint:ok
+
 
 # API 2
 (setapi(a, 2) for a in ("QDate", "QDateTime", "QString", "QTime", "QUrl",
                         "QTextStream", "QVariant"))
 
-from PyQt4.QtCore import Qt
-from PyQt4.QtCore import QProcess
-from PyQt4.QtCore import QTimer
-from PyQt4.QtCore import QSize
 
-from PyQt4.QtGui import QDialog
-from PyQt4.QtGui import QDockWidget
-from PyQt4.QtGui import QLabel
-from PyQt4.QtGui import QIcon
-from PyQt4.QtGui import QLineEdit
-from PyQt4.QtGui import QAction
-from PyQt4.QtGui import QPixmap
-from PyQt4.QtGui import QApplication
-from PyQt4.QtGui import QFileDialog
-from PyQt4.QtGui import QProgressBar
-from PyQt4.QtGui import QToolBar
-from PyQt4.QtGui import QVBoxLayout
-from PyQt4.QtGui import QWidget
-from PyQt4.QtGui import QColorDialog
-from PyQt4.QtGui import QTableWidget
-from PyQt4.QtGui import QTableWidgetItem
-from PyQt4.QtGui import QDirModel
-from PyQt4.QtGui import QColumnView
-from PyQt4.QtGui import QTextBrowser
-from PyQt4.QtGui import QSlider
+from PyQt4.QtGui import (QDialog, QDockWidget, QLabel, QIcon, QLineEdit,
+    QAction, QPixmap, QApplication, QFileDialog, QProgressBar, QToolBar,
+    QVBoxLayout, QWidget, QColorDialog, QTableWidget, QTableWidgetItem,
+    QDirModel, QColumnView, QTextBrowser, QSlider)
+
+from PyQt4.QtCore import Qt, QProcess, QTimer, QSize
 
 from .pypi_proxy_donottrack import ProxyTransport
 
@@ -85,8 +70,9 @@ from ninja_ide.core import plugin
 
 
 # globals
-HOME = os.path.expanduser("~")  # crossplatform shortcut to home sweet home
-N = os.linesep  # crossplatform standard new line character string
+HOME = path.expanduser("~")  # crossplatform shortcut to home sweet home
+N = linesep  # crossplatform standard new line character string
+
 
 try:
     logger = logging.getLogger(
@@ -110,9 +96,9 @@ class filexplorerPluginMain(plugin.Plugin):
 
         self.dock = QDockWidget()
         self.dock.setAllowedAreas(Qt.LeftDockWidgetArea |
-                                   Qt.RightDockWidgetArea)
+                                  Qt.RightDockWidgetArea)
         self.dock.setFeatures(QDockWidget.DockWidgetFloatable |
-                                           QDockWidget.DockWidgetMovable)
+                              QDockWidget.DockWidgetMovable)
         self.dock.setWindowTitle("fileXplorer")
         self.dock.setStyleSheet('QDockWidget::title { text-align: center; }')
 
@@ -125,10 +111,10 @@ class filexplorerPluginMain(plugin.Plugin):
         # Disk Usage Bar
         self.hdbar = QProgressBar()
         if sys.platform != 'win32':
-            self.hdbar.setMaximum(os.statvfs(HOME).f_blocks *
-                os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
-            self.hdbar.setValue(os.statvfs(HOME).f_bfree *
-                os.statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
+            self.hdbar.setMaximum(statvfs(HOME).f_blocks *
+                statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
+            self.hdbar.setValue(statvfs(HOME).f_bfree *
+                statvfs(HOME).f_frsize / 1024 / 1024 / 1024)
         self.hdbar.setToolTip(str(self.hdbar.value()) + '% Total Disk Use ')
         #self.hdbar.setStyleSheet('''QProgressBar{background-color:
         #QLinearGradient(spread:pad,x1:0,y1:0,x2:1,y2:1,stop:0 rgba(255,0,0,99),
@@ -153,7 +139,7 @@ class filexplorerPluginMain(plugin.Plugin):
         self.sli.valueChanged.connect(lambda: self.fileView.setIconSize(
             QSize(self.sli.value(), self.sli.value())))
         self.sli.sliderReleased.connect(lambda:
-            self.sli.setToolTip('Icon Size: ' + str(self.sli.value()) + ' px'))
+            self.sli.setToolTip('Icon Size: ' + str(self.sli.value())))
 
         class TransientWidget(QWidget):
             ' persistant widget thingy '
@@ -183,18 +169,19 @@ class filexplorerPluginMain(plugin.Plugin):
         self.pic = QAction(QIcon.fromTheme("camera-photo"), 'Screenshot', self)
         self.pic.triggered.connect(lambda: QPixmap.grabWindow(
             QApplication.desktop().winId()).save(QFileDialog.getSaveFileName(
-            self.dock, " Save Screenshot As ... ", HOME, '(*.png)')))
+            self.dock, " Save Screenshot As ... ", HOME, ';;(*.png)')))
 
         # copy time
         self.tim = QAction(QIcon.fromTheme("user-away"),
                            'Date and Time to Clipboard', self)
         self.tim.triggered.connect(lambda: QApplication.clipboard().setText(
-            datetime.datetime.now().strftime(" %A %B %d-%m-%Y %H:%M:%S %p ")))
+            datetime.now().strftime(" %A %B %d-%m-%Y %H:%M:%S %p ")))
 
         # color chooser
         self.cl = QAction(QIcon.fromTheme("applications-graphics"),
                           'Color Chooser to Clipboard', self)
-        self.cl.triggered.connect(self.showQColorDialog)
+        self.cl.triggered.connect(lambda: QApplication.clipboard().setText(
+            '{}'.format(QColorDialog.getColor().name())))
 
         # icon chooser
         self.icn = QAction(QIcon.fromTheme("insert-image"),
@@ -229,9 +216,9 @@ class filexplorerPluginMain(plugin.Plugin):
         # Jedi list comprehension for LOCAL search
         str(["{}/{}".format(root, f) for root, f in list(itertools.chain(*
             [list(itertools.product([root], files))
-            for root, dirs, files in os.walk(str(
+            for root, dirs, files in walk(str(
             QFileDialog.getExistingDirectory(self.dock,
-            'Open Directory to Search', os.path.expanduser("~"))))]))
+            'Open Directory to Search', path.expanduser("~"))))]))
             if f.endswith(('.py', '.pyw', '.pth')) and not f.startswith('.')
             and str(self.srch.text()).lower().strip() in f]
         ).replace(',', '<br>') + '<hr><h3> Search PyPI Python files: </h3>' +
@@ -249,12 +236,6 @@ class filexplorerPluginMain(plugin.Plugin):
         tmr = QTimer(self.fileView)
         tmr.timeout.connect(self.textBrowser.hide)
         tmr.start(20000)
-
-    def showQColorDialog(self):
-        ' Choose a Color and copy it to clipboard '
-        color = QColorDialog.getColor()
-        if color.isValid():
-            QApplication.clipboard().setText('"' + color.name() + '"')
 
     def iconChooser(self):
         ' Choose a Icon and copy it to clipboard '
@@ -278,7 +259,7 @@ class filexplorerPluginMain(plugin.Plugin):
             item.setToolTip(icon)
             table.setItem(index, 0, item)
         table.clicked.connect(lambda: QApplication.clipboard().setText(
-            'QtGui.QIcon.fromTheme("' + table.currentItem().toolTip() + '")'))
+          'QtGui.QIcon.fromTheme("{}")'.format(table.currentItem().toolTip())))
         table.doubleClicked.connect(prv.close)
         table.resizeColumnsToContents()
         table.resizeRowsToContents()
@@ -292,30 +273,30 @@ class filexplorerPluginMain(plugin.Plugin):
         f = str(self.model.filePath(index))
         # ctime is NOT crossplatform,metadata change on *nix,creation on Window
         # http://docs.python.org/library/os.path.html#os.path.getctime
-        m = (f + N + str(os.path.getsize(f) / 1024) + ' Kilobytes' + N +
-            str(len(file(f, 'r').readlines())) + ' Lines' + N +
-            str(len(s.replace(N, ''))) + ' Characters' + N +
+        m = ''.join((f, N, str(path.getsize(f) / 1024), ' Kilobytes', N,
+            str(len(file(f, 'r').readlines())), ' Lines', N,
+            str(len(s.replace(N, ''))), ' Characters', N,
             str(len([a for a in sub('[^a-zA-Z0-9 ]', '', s).split(' ')
-                if a != ''])) + ' Words' + N +
-            str(len([a for a in s if a in punctuation])) + ' Punctuation' + N +
-            oct(os.stat(f).st_mode)[-3:] + ' Permissions' + N +
-            time.ctime(os.path.getatime(f)) + ' Accessed' + N +
-            time.ctime(os.path.getmtime(f)) + ' Modified' + N +
-            'Owner: ' + str(self.model.fileInfo(index).owner()) + N +
-            'Is Writable:' + str(self.model.fileInfo(index).isWritable()) + N +
-            'Is Executable:' + str(self.model.fileInfo(index).isExecutable()) +
-            N + 'Is Hidden:' + str(self.model.fileInfo(index).isHidden()) + N +
-            'Is SymLink: ' + str(self.model.fileInfo(index).isSymLink()) + N +
-            'File Extension: ' + str(self.model.fileInfo(index).suffix())
-        )
+                if a != ''])), ' Words', N,
+            str(len([a for a in s if a in punctuation])), ' Punctuation', N,
+            oct(stat(f).st_mode)[-3:], ' Permissions', N,
+            time.ctime(path.getatime(f)), ' Accessed', N,
+            time.ctime(path.getmtime(f)), ' Modified', N,
+            'Owner: ', str(self.model.fileInfo(index).owner()), N,
+            'Is Writable: ', str(self.model.fileInfo(index).isWritable()), N,
+            'Is Executable: ', str(self.model.fileInfo(index).isExecutable()),
+            N, 'Is Hidden: ', str(self.model.fileInfo(index).isHidden()), N,
+            'Is SymLink: ', str(self.model.fileInfo(index).isSymLink()), N,
+            'File Extension: ', str(self.model.fileInfo(index).suffix())
+        ))
         #print(m)
         self.preview.setToolTip(m)
         self.preview.setText(s)
         self.preview.resize(self.preview.size().width(),
                             self.dock.size().height())
-        self.process.start('xdg-open ' + f)
+        self.process.start('xdg-open {}'.format(f))
         if not self.process.waitForStarted():
-            print((" ERROR: %s failed!" % (str(f))))
+            print((" ERROR: Process {} Failed ! ".format(str(f))))
             return
 
 
